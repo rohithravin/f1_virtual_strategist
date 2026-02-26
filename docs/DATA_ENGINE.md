@@ -1,6 +1,6 @@
 # ⚙️ The Interaction Data Engine: Deep Dive
 
-This document outlines the technical architecture of **The Interaction Data Engine**, the foundational preprocessing layer of the Virtual Strategist. 
+This document outlines the technical architecture of **The Interaction Data Engine**, the foundational preprocessing layer of the Virtual Strategist.
 
 The goal of this engine is simple but technically complex: **Transform asynchronous, multi-rate, noisy Formula 1 telemetry into spatially-aligned, physics-corrected tensors for real-time Transformer inference.**
 
@@ -19,14 +19,14 @@ To fix this, the Data Engine slices telemetry by **Track Distance (Meters)**.
 2. **Standardization:**
    * **Brake & Throttle:** Normalized to a continuous $[0.0, 1.0]$ scale.
    * **RPM:** Scaled relative to the engine's hard-limiter to provide a standardized power-band metric.
-3. **Spatial Interpolation:** We utilize **Cubic Spline Interpolation** over the `Distance` channel to guarantee exactly 1 sample every fixed distance interval (e.g., every 3 meters). 
+3. **Spatial Interpolation:** We utilize **Cubic Spline Interpolation** over the `Distance` channel to guarantee exactly 1 sample every fixed distance interval (e.g., every 3 meters).
 4. **Output:** A dense vector $\Phi_{d} \in \mathbb{R}^{5}$ for a specific "Micro-Sector" (e.g., 300 meters long, resulting in exactly 100 data points).
 
 ---
 
 ## 2. Historical Stacking (The Look-Back Strategy)
 
-To calculate the *derivative* of pace (the true rate of degradation), the model needs to see how the car performed in the exact same Micro-Sector on previous laps. 
+To calculate the *derivative* of pace (the true rate of degradation), the model needs to see how the car performed in the exact same Micro-Sector on previous laps.
 
 If we feed it every single lap, memory explodes. If we only feed it the previous lap, it misses the macro-trend. The Data Engine solves this using an **Exponential Decay Look-Back Stack**.
 
@@ -85,16 +85,18 @@ By passing `True_Pace` to the model, the Transformer's `Degradation Head` can ac
 
 ---
 
-## 5. Storage Architecture (Parquet & DuckDB)
+## 5. Storage Architecture (Parquet & Polars)
 
-To train a Transformer with high-frequency data across thousands of historical races, row-based databases (like PostgreSQL) are too slow.
+To train a Transformer with high-frequency data across thousands of historical races, row-based databases (like PostgreSQL) or Pandas DataFrames are too slow and memory-inefficient.
 
 ### **Columnar Superiority**
-We utilize **DuckDB** querying over partitioned **Parquet** files. DuckDB's vectorized execution engine is uniquely suited for aggregation.
-* **Partitioning:** Data is heavily partitioned by `Year / Race / Session / Driver`.
+We utilize **Polars** executing over partitioned **Parquet** files. Polars is a blazingly fast DataFrame library written in Rust. It utilizes lazy evaluation and Apache Arrow to process massive arrays without exhausting RAM.
+* **Partitioning:** Data is heavily partitioned by `Year / Race / Session / Driver` on disk.
 
-### **Zero-Copy Windowing**
-During training and inference, the model requires overlapping spatial windows. DuckDB allows us to perform high-speed `OVER (ORDER BY distance ROWS BETWEEN 99 PRECEDING AND CURRENT ROW)` queries. Because DuckDB interfaces natively with Python (and Arrow), these sliding windows are passed directly into PyTorch/MLX tensors with **zero-copy memory overhead**.
+### **Zero-Copy Windowing & As-Of Joins**
+During training and inference, the model requires overlapping spatial windows and precise time-alignment.
+*   **As-Of Joins:** We use Polars' native `join_asof()` to perfectly align asynchronous GPS packets from the Lead Car with the Subject Car's telemetry ticks.
+*   **Zero-Copy Tensors:** Because Polars runs on Apache Arrow, the resulting DataFrames are passed directly into PyTorch/MLX tensors with **zero-copy memory overhead**.
 
 ---
 
@@ -105,14 +107,14 @@ At the end of the pipeline, the Data Engine produces a synchronized batch of ten
 ```python
 # 1. Subject Telemetry Stack (Input to 1D-CNN)
 # Shape: [Batch, History_Laps, Sequence_Length, Features]
-X_telemetry = Tensor(B, 5, 100, 5)  
+X_telemetry = Tensor(B, 5, 100, 5)
 # History_Laps: [L, L-1, L-2, L-5, L_baseline]
 # Sequence_Length: 100 distance steps (e.g., a 300m Micro-Sector)
 # Features: [Throttle, Brake, RPM, Speed, Gear]
 
 # 2. Tactical Neighborhood State (Input to Cross-Attention)
 # Shape: [Batch, Num_Neighbors, Relational_Features]
-X_tactical = Tensor(B, 2, 2)     
+X_tactical = Tensor(B, 2, 2)
 # Neighbors: [Lead, Chaser]
 # Relational_Features: [Delta_Distance_Sec, Delta_Velocity_Kmh]
 

@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "f1-virtual-strategist"
+version = "0.1.0"
+description = "Multi-Modal Spatio-Temporal Transformer for F1 Race Strategy Optimization"
+authors = ["Rohith Ravindranath <rohithravin@gmail.com>"]
+readme = "README.md"
+packages = [{include = "f1_virtual_strategist", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastf1 = "^3.4.0"
+pandas = "^2.2.0"
+numpy = "^1.26.0"
+torch = "^2.2.0"
+polars = "^0.20.0"
+scipy = "^1.12.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-cov = "^4.1.0"
+jupyter = "^1.0.0"
+black = "^24.2.0"
+pre-commit = "^3.6.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
