@@ -41,13 +41,13 @@ jobs:
     - name: Upload HTML Coverage Report
       uses: actions/upload-artifact@v4
       with:
-        name: coverage-html
+        name: coverage-html-${{ matrix.python-version }}
         path: htmlcov/
         retention-days: 14
 
     - name: Upload XML Coverage Report
       uses: actions/upload-artifact@v4
       with:
-        name: coverage-xml
+        name: coverage-xml-${{ matrix.python-version }}
         path: coverage.xml
         retention-days: 14
