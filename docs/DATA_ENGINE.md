@@ -16,9 +16,13 @@ To fix this, the Data Engine slices telemetry by **Track Distance (Meters)**.
 
 ### **Data Ingestion & Resampling**
 1. **Raw Ingestion:** Fast-stream ingestion of `[RPM, Speed, Throttle, Brake, Gear]` alongside the cumulative `Distance` channel.
-2. **Standardization:**
-   * **Brake & Throttle:** Normalized to a continuous $[0.0, 1.0]$ scale.
-   * **RPM:** Scaled relative to the engine's hard-limiter to provide a standardized power-band metric.
+    2. **Standardization (Fixed Scaling):**
+       Because we know the absolute physical boundaries of an F1 car, we use fixed scaling for most input tensors to bind them strictly between `[0.0, 1.0]`. This is critical for stabilizing the 1D-CNN and Transformer gradients.
+       * **Throttle:** Clipped to 100, then normalized to `[0.0, 1.0]`.
+       * **Brake:** Boolean value mapped to `1.0` or `0.0`.
+       * **RPM:** Scaled against a theoretical hard limiter (`15,000` RPM) to `[0.0, 1.0]`.
+       * **Speed:** Scaled against a theoretical max speed (`400.0` km/h) to `[0.0, 1.0]`.
+       * **Gear:** Unnormalized. Left as absolute integer `[0, 8]` (Small integer ranges do not disrupt gradients, and allow for easier embedding lookup later if needed).
 3. **Spatial Interpolation:** We utilize **Cubic Spline Interpolation** over the `Distance` channel to guarantee exactly 1 sample every fixed distance interval (e.g., every 3 meters).
 4. **Output:** A dense vector $\Phi_{d} \in \mathbb{R}^{5}$ for a specific "Micro-Sector" (e.g., 300 meters long, resulting in exactly 100 data points).
 

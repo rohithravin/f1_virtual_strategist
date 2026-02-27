@@ -57,3 +57,5 @@ models/
 *.pt
 *.pth
 *.onnx
+f1_cache/
+htmlcov/
